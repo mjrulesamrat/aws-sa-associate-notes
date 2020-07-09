@@ -1227,31 +1227,32 @@ Default billing per second and charged minimum for 60 seconds when provisioned.
     - Anything between Reserved and Spot
     - SHort term workloads that can not tolerate interruptions
 2. __Spot Billing__ for Spot-fleet instances
-    - Spot instances allow consumption of spare AWS capacity for a given instance type and size in a specific AZ
+    - Spot instances allow consumption of spare AWS capacity for a given instance type and size in a __specific AZ__
     - Instances are provided for __as long as your bid is above the spot price__, and you only ever pay the spot price
     - If your bid is exceeded, instances are terminated with a __two-minute warning__
     - __Spot fleets__ are a container for "capacity needs". You can specify pools of instances of certain types/sizes aiming for a given "capacity". A minimum percentage of on-demand can be set to ensure the fleet is always active
-    - Perfect fit for non-critical workloads, burst workloads, or consistent non-critical jobs that can tolerate interruptions without impacting functionality
+    - Perfect fit for __non-critical workloads, burst workloads__, or consistent non-critical jobs that can tolerate interruptions without impacting functionality
+    - By setting the __maximum price__, you'll ensure that the price of an EC2 never exceeds what you are willing to pay
     - __Not sutable for long-running workloads__ that require stability and cannot tolerate interruptions
 3. __Reserved Billing__ (Zonal or Regional)
     - Reserved instance lock in a reduced rate for __one__ or __three years__
     - __Zonal__ reseved instances include a __capacity reservation__
     - Your commitment incurs costs even if instances aren't launched
     - Reserved purchases are used for long-running, critical systems/componenets, understood, and consistent workloads
-    - Pay in all up-front, partially up-front, no up-front
-    - Regional is flexible but has no capacity reservations
+    - Pay in all __up-front, partially up-front, no up-front__
+    - __Regional is flexible but has no capacity reservations__
 
 
 ## Dedicated Hosts
 
-Pick instance type and size. With that, there will be some limits.
+Pick instance type and size. With that, there will be __some limits__ of available number of instances.
 
-DHs are EC2 hosts for a given type and size that cna be dedicated to you.
+DHs are EC2 hosts for a __given type and size__ that cna be dedicated to you.
     - The number of instances that can run on the host is fixed -- depending on the type and size
 
-Not a regional but AZ specific physical hardware based AWS service. Keep that in mind. Okay!
+Not a regional but __AZ specific physical hardware based AWS service__. Keep that in mind. Okay!
 
-When software is licenced per core/CPU and not compatible with running within a shared cloud environment.
+When __software is licenced per core/CPU__ and not compatible with running within a __shared cloud environment__.
 
 
 # EFS
