@@ -5,7 +5,7 @@
 
 - [FAQs](#faqs)
 - [Well-Architected Framework](#well-architected-framework)
-- [VPC](#vpc)
+- [VPC](#vpc-virual-private-cloud)
 - [Route 53](#route53)
 - [ELB and Autoscaling](#elb-and-autoscaling)
 - [VPC VPN & Direct Connect](#vpc-vpn-direct-connect)
@@ -185,7 +185,203 @@ __Key AWS Service__ — Cost Explorer.
 
 
 
-# VPC
+# VPC (Virual Private Cloud)
+
+It's private data-center inside the AWS platform. Can be a mix of Public/Private.
+    - Regional, Highly-available, can connect to on-premise networks
+    - Isolated from other VPCs by default
+
+## VPC and Subnet
+
+Each Subnet can only be associated with single AZ.
+
+Number of Subnets
+- Max: __/16__ CIDR block __(65,536 IPs)__
+- Min: __/24__ CIDR block __(16 IPs)__
+
+__Default VPC__ --
+- /16 CIDR block __(172.31.0.0/16) is default CIDR__
+- /20 subnets in each AZ
+- Pre-configured with all required networking/security
+- Attached internet gateway with "main" route table sending all IPv4 traffic to the internet gateway using a 0.0.0.0/0 route
+- A default DHCP option set attached
+- SG: Default -- all from itself, all outbound
+- NACL: Default -- allow all inbound and outbound
+
+__Tenancy__ - Default is shared hardware, Dedicated is dedicated hardware.
+
+Each Subnet will have __5 reserved IPs__:
+- .0 network
+- .1 Router
+- .2 DNS
+- .3 Future
+- .X Broadcast (Based on the CIDR range last one is always Broadcast)
+
+
+__DHCP Options set__ can be created, but can not be modified. Can be attached to one VPC only (1:1). If we want to change DHCP Options set, then need to create new one and associate by removing old one.
+
+__DHCP Options set__ helps instances inside subnets getting private & public IPs allocated.
+
+
+Subent can be shared with Other AWS accounts. Other accounts can provision resources in these Subnets.
+
+
+## Routing and Internet Gateway
+
+__VPC Routing__ (Route Table)
+- Every VPC has a virtual routing device called the __VPC router__ -- __collection of routes__
+- It has __an interface in any VPC subnet__ known as the __subnet+1__ address -- for 10.0.1.0/24, this would be 10.0.1.1/32
+- The __router is highly available, scalable, and controls data entering and leaving the VPC__ and its subnet
+- Each VPC has a __"main" route table__, which is allocated to all subnets in the VPC by default. __A subnet must have one route table.__
+- "custom" route tables can be created and associated with subnets -- but only __one route table(RT) per subnet__.
+- A route table __controls what the VPC router does with traffic__ leaving a subnet
+- An internet gateway is created and attached to a VPC(1:1). It can route traffic for public IPs to and from the internet.
+
+__Routes__
+- A __RT is a collection of routes__ that are used when traffic from a subnet arrives at the VPC router.
+- Every route table has a __local route__, which matches the CIDR of the VPC and __lets traffic be routed between subnets__. (Local route is Default route)
+- A route contains a destination and a target. Traffic is forwarded to the target if its detination matches the route destination
+- If __multiple routes apply for same destination__, he most specific is chosen. A /32 is chosen before /24, before a /16 (Bigger prefix takes prriority)
+- Default routes(0.0.0.0/0 v4 and ::/0 v6) can be added that match any traffic not already matched
+- targets can be IPS or AWS networking gateways/objects
+- A __subnet is a public subnet__ if it is
+    - If configured to allocate public IPs(__Auto-assign public IP__)
+    - If the __VPC has an associated internet gateway__
+    - If that __subnet has a default route to that internet gateway__
+
+__Internet Gateway__ (IGW)
+    - Attaches with single VPC(1:1) with 0.0.0.0/0 IP/Port
+    - IGW connects with further public subnets
+    - Responsible for Public internet connection for Subnets
+    - Highly available by design
+    - Responsible for packets re-routing to/from internet and public subnets
+    - Performs __Static Network Address Translation (sNAT)__ (Instances doen't store public IP, done by IGW and process is call Static NAT)
+
+__No AWS products has Public IPs stored. This is done by Internet gateway sitting in each VPC these resources are.__
+
+__Best practices with IGW and Route Tables__:
+- In route tables, always keep "Main" as it is.
+- Create custom route table
+- Add route from 0.0.0.0/0 to target IGW
+- Them, associate public subnets to this route table
+
+## Bastion Hosts // JumpBox
+
+- A host that sits at the perimeter of a VPC
+- It functions as an entry point to the VPC for trusted admins
+- Allows for updates or configuration tweaks remotely while allowing the VPC to stay private and protected
+- Generally connected to via SSH(Linux) or RDP(Windows)
+- Bastion hosts must be kept updated, and security hardened and audited regularly
+- Security: Multifactor authentication, ID federation, IP blocks
+- Secure public access to private resources
+- __Custom VPC doesn't enable public IPv4 DNS hostnames__, Need to enable DNS hostnames
+
+__SSH Agent forwarding__ is used with Bastion Host to connect private instances with the same key, bu only from Bastion Host.
+
+## NAT, NAT instance, NAT Gateway
+
+Network address Translations is a __process where the source or desination attributes of an IP packet are changed__
+
+Statis NAT is the process of 1:1 translation where an internet gateway converts a private address to a public IP address
+
+__Dynamic NAT__ is a variation that __allows many private IP addresses to get outgoing internet access using a smaller number of public IPs__(generally one)
+
+Dynamic NAT is provided within AWS using a NAT gateway that allows private subnets in an AWS VPC to access the internet
+
+__NAT Best pracices__ For high availability Have each AZ one dedicated NAT gateway assigned. 2 AZ - 2 NAT gateway
+
+Supports 5 GiB of bandwidth by default and support upto 45 GiB bandwidth.
+
+__DNAT gateways__ provide two functions __for IPv4__ resources:
+    - Sharing a __single public IP__ address for __private resources__
+    - __Outgoing-only access__
+
+
+## Network ACLs
+
+- Controls the traffic between subnets.
+- NACLs are collections of rules that can __explicitly allow or deny traffic__ based on its __protocol, port range, and source/destination__
+- Rules are processed in __number orders, lowest first__. When a match is found, that action is taken and processing stops
+- The __'*' rule is prcessed last__ and is an __implicit deny__
+- NACLs have two sets of rules: __inbound__ and __outbound__
+- __NACLs__ operates at __Layer 4(Transport)__ and __Security groups__ operate at __Layer 5(Session)__
+
+
+## VPC Peering
+
+- Allows __direct connections__ between __two isolated VPCs__ at __Layer 3__
+- VPC Peering uses a peering connection, which is a __gateway object linking two VPCs__ __Private IP to Private IP__
+- __Span AWS accounts and Regions__
+- Data is encrypted and transits via the AWS global backbone.
+- E.G. Company mergers, shared services, company and vendors, auditing
+
+__VPC Peering Limitations__
+- __VPC CIDR__ blocks __cannot overlap__
+- __Only__ connect __two VPCs__ -- routing is not trasitive
+- Rotes are required at both sides (Remove CIDR -> Peer Connection>)
+- __NACLs and SGs__ can be used to __control access__
+- __SGs__ can be __referenced but not cross-regions__
+- IPv6 support is not available cross-region
+- __DNS resolution__ to private IPs can be enabled, but it's a setting needed __at both sides__
+
+__VPC peering__ connection route contains Target as __`pcx-xxxxxx`__.
+
+__VPN connection__ // __Direct Connect__ connection route contains Target as __`vgw-xxxxxx`__.
+
+
+## VPC Endpoints
+
+- __Used to connect to AWS public sevices__ such as S3 (__without needeing for the VPC to have an attached internet gateway__)
+- Are also __gateway object__ created within a VPC
+
+VPC Endpoint __Types__
+- __Gateway__ endpoints -- __DynamoDB, S3__
+- __Interface__ endpoints -- Everything else (__SNS, SQS, KMS, logs, monitoring, Kinesis, Sagemaker, Glue__)
+
+__When to use VPC EPs__
+- If entire VPC is provate with no IGW
+- If a specific instance has no public IP/NATGW and needs to access public services
+- To access resources restricted to specific VPCs or endpoints (private S3 buckets)
+
+VPC EP __considerations__
+- Gateway endpoints
+    - used via __route table entries__ -- they are __gateway devices__.
+    - Prefix lists for a service are used in the destination field with the gateway as the target
+    - __restricted via policies__
+    - are HA acress AZs in a region
+- Interface endpoints
+    - Creates __Elastic Network Interfaces (ENI)__
+    - IEs are Interfaces in a specific subnets
+    - For HA, you need to add multiple interfaces -- one per AZ
+    - __controlled via SGs__ on that interface
+    - NACLs also impact traffic
+    - __Add or replace the DNS for the service__ -- __no route table updates are required__
+    - Code changes to use the endpoint DNS are required, or __enable private DNS to override the default service DNS__
+
+## IPv6 in VPC
+
+- Not available in every AWS products
+- Currently opt-in -- disabled by default
+- To use it -- request an IPv6 allocation. Each VPC is allocated a /56 CIDR from the AWS pool -- this cannot be adjusted
+- With the VPC IPv6 range allocated, subnets can be allocated a /64 CIDR from the within the /56 range
+- Resources launched into a subnet with an IPv6 range can be allocated a IPv6 address via DHCP6
+- __IPv6 CIDR block range__ can be __attached to Operating System__
+
+__Limitations and considerations__
+- DNS names are not allocated to IPv6 addresses
+- IPv6 addresses are all publicly routable -- there is no concept of private vs public with IPv6
+- With IPv6, the OS is configured with this public address via DHCP6
+- Elastic IPs aren't relevent with IPv6
+- Not currently supported for VPNs, customer gateways, and VPC endpoints
+
+## Egress-Only Gateway
+
+- Works with IPv6
+- Need to create a gateway object and add to VPC route table
+- Once added to VPC route table, all associated subnets can now only access IPv6 internet traffic outside to VPC
+- Egress only means, only outbound connections
+- No IPv6 device can access/initiate-connection to these subnets from outside internet.
+
 
 We cannot route traffic to a __NAT gateway__ or __VPC gateway__ endpoints through a __VPC peering__ connection, a __VPN connection__, or __AWS Direct Connect__. A NAT gateway or VPC gateway endpoints cannot be used by resources on the other side of these connections. Conversely, a NAT gateway // VPC gateway endpoints cannot send traffic over VPC endpoints, AWS VPN connections, Direct Connect or VPC Peering connections either.
 
@@ -210,9 +406,6 @@ Instances in __custom VPCs don't get public DNS hosts by default__, we have to s
 We can set a __custom route table as the main route table__.
 
 We can add __secondary CIDR ranges__ to an existing VPC. When a secondary CIDR block is added to a VPC, a route for that block with target as "local" is automatically added to the route table.
-
-__VPC peering__ connection route contains Target as `pcx-xxxxxx`.
-__VPN connection__ // __Direct Connect__ connection route contains Target as `vgw-xxxxxx`.
 
 __VPN__ is established over a __Virtual Private Gateway__.
 
@@ -1104,6 +1297,11 @@ Each ENI has max __5 SGs__ associated with it.
 SGs are __stateful__ -- meaning for any traffic allowed in/out, the return traffic is automatically allowed.
 
 SGs can reference AWS resources, other SGs, and even themselves.
+
+Security groups can be shared across
+- Two VPCs in the same region
+- Multiple EC2s instances in a VPC
+- AWS accounts in the same region
 
 
 ## EC2 Monitoring
